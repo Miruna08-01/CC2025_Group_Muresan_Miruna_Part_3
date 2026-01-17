@@ -1,0 +1,8 @@
+#!/Users/mirunamuresan/Desktop/Cloud/CC2025_Group_Muresan_Miruna_Part_3/frontend/venv/bin/python3.12
+# -*- coding: utf-8 -*-
+import re
+import sys
+from pip._internal.cli.main import main
+if __name__ == '__main__':
+    sys.argv[0] = re.sub(r'(-script\.pyw|\.exe)?$', '', sys.argv[0])
+    sys.exit(main())
