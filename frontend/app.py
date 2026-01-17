@@ -7,10 +7,24 @@ import altair as alt
 st.set_page_config(page_title="Streamlit + Cognito Secure App", layout="wide")
 st.title("✅ Streamlit Frontend (AWS Cognito)")
 
-COGNITO_DOMAIN = st.secrets["COGNITO_DOMAIN"]
-COGNITO_CLIENT_ID = st.secrets["COGNITO_CLIENT_ID"]
-REDIRECT_URI = st.secrets["REDIRECT_URI"]
-BACKEND_URL = st.secrets["BACKEND_URL"]
+import os
+import streamlit as st
+
+COGNITO_DOMAIN = os.getenv("COGNITO_DOMAIN")
+COGNITO_CLIENT_ID = os.getenv("COGNITO_CLIENT_ID")
+REDIRECT_URI = os.getenv("REDIRECT_URI")
+BACKEND_URL = os.getenv("BACKEND_URL")
+
+missing = [k for k, v in {
+    "COGNITO_DOMAIN": COGNITO_DOMAIN,
+    "COGNITO_CLIENT_ID": COGNITO_CLIENT_ID,
+    "REDIRECT_URI": REDIRECT_URI,
+    "BACKEND_URL": BACKEND_URL,
+}.items() if not v]
+
+if missing:
+    st.error(f"Missing environment variables: {', '.join(missing)}")
+    st.stop()
 
 AUTH_URL = (
     f"{COGNITO_DOMAIN}/oauth2/authorize?"
