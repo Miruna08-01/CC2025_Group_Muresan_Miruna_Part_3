@@ -6,8 +6,10 @@ from jose import jwt, JWTError
 COGNITO_ISSUER = os.getenv("COGNITO_ISSUER")
 COGNITO_CLIENT_ID = os.getenv("COGNITO_CLIENT_ID")
 
-_jwks_cache = None
+if not COGNITO_ISSUER or not COGNITO_CLIENT_ID:
+    raise RuntimeError("Missing COGNITO_ISSUER or COGNITO_CLIENT_ID env vars")
 
+_jwks_cache = None
 
 def get_jwks():
     global _jwks_cache
@@ -18,18 +20,16 @@ def get_jwks():
         _jwks_cache = r.json()
     return _jwks_cache
 
-
 def verify_cognito_token(token: str) -> dict:
     jwks = get_jwks()
     headers = jwt.get_unverified_header(token)
     kid = headers.get("kid")
 
     key = None
-    for k in jwks["keys"]:
-        if k["kid"] == kid:
+    for k in jwks.get("keys", []):
+        if k.get("kid") == kid:
             key = k
             break
-
     if not key:
         raise HTTPException(status_code=401, detail="Invalid token key (kid not found)")
 
@@ -44,27 +44,27 @@ def verify_cognito_token(token: str) -> dict:
         )
         return payload
     except JWTError as e:
-        raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
-
+        raise HTTPException(status_code=401, detail=f"Invalid or expired token: {str(e)}")
 
 def require_auth(request: Request) -> dict:
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing Bearer token")
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        print("[AUTH] Missing Bearer token")
+        raise HTTPException(status_code=401, detail="Missing Authorization: Bearer <token>")
 
-    token = auth_header.split(" ", 1)[1]
+    token = auth.split(" ", 1)[1]
     payload = verify_cognito_token(token)
 
-    groups = payload.get("cognito:groups", [])
-    role = groups[0] if isinstance(groups, list) and groups else (groups or "user")
+    groups = payload.get("cognito:groups", []) or []
+    role = "admin" if "admin" in groups else ("user" if "user" in groups else "unknown")
+    device_id = payload.get("custom:device_id")
 
     user = {
         "email": payload.get("email"),
         "sub": payload.get("sub"),
         "role": role,
-        "device_id": payload.get("custom:device_id"),
+        "device_id": device_id,
     }
 
-    # auth/security logs
-    print("AUTH_OK", user)
+    print("[AUTH_OK]", user)
     return user

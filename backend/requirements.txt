@@ -14,3 +14,9 @@ typing-inspection==0.4.2
 typing_extensions==4.15.0
 uvicorn==0.38.0
 gunicorn
+fastapi
+uvicorn
+python-dotenv
+python-jose[cryptography]
+requests
+azure-storage-blob
