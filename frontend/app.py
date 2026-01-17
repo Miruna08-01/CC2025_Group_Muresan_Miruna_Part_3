@@ -23,7 +23,7 @@ missing = [k for k, v in {
 }.items() if not v]
 
 if missing:
-    st.error(f"Missing environment variables: {', '.join(missing)}")
+    st.error(f"Missing   environment variables: {', '.join(missing)}")
     st.stop()
 
 AUTH_URL = (
