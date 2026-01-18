@@ -1,40 +1,73 @@
 import os
+import json
+from typing import Dict, Any
+from dotenv import load_dotenv
 import requests
-from fastapi import HTTPException, Request
+from fastapi import Header, HTTPException
 from jose import jwt, JWTError
 
+load_dotenv()
 COGNITO_ISSUER = os.getenv("COGNITO_ISSUER")
 COGNITO_CLIENT_ID = os.getenv("COGNITO_CLIENT_ID")
 
 if not COGNITO_ISSUER or not COGNITO_CLIENT_ID:
     raise RuntimeError("Missing COGNITO_ISSUER or COGNITO_CLIENT_ID env vars")
 
-_jwks_cache = None
+JWKS_URL = f"{COGNITO_ISSUER}/.well-known/jwks.json"
 
-def get_jwks():
+_jwks_cache: Dict[str, Any] | None = None
+
+
+def _get_jwks() -> Dict[str, Any]:
     global _jwks_cache
     if _jwks_cache is None:
-        url = f"{COGNITO_ISSUER}/.well-known/jwks.json"
-        r = requests.get(url, timeout=10)
-        r.raise_for_status()
-        _jwks_cache = r.json()
+        resp = requests.get(JWKS_URL, timeout=10)
+        resp.raise_for_status()
+        _jwks_cache = resp.json()
     return _jwks_cache
 
-def verify_cognito_token(token: str) -> dict:
-    jwks = get_jwks()
-    headers = jwt.get_unverified_header(token)
-    kid = headers.get("kid")
 
-    key = None
-    for k in jwks.get("keys", []):
-        if k.get("kid") == kid:
-            key = k
-            break
-    if not key:
-        raise HTTPException(status_code=401, detail="Invalid token key (kid not found)")
+def _extract_role_from_claims(claims: Dict[str, Any]) -> str:
+    # Cognito: "cognito:groups" poate fi listă sau string
+    groups = claims.get("cognito:groups", [])
+    if isinstance(groups, list) and len(groups) > 0:
+        return groups[0]
+    if isinstance(groups, str) and groups:
+        return groups
+    return "user"
+
+
+def require_auth(authorization: str = Header(None)) -> Dict[str, Any]:
+    """
+    Expects: Authorization: Bearer <JWT>
+    Validates JWT with Cognito JWKS.
+    Returns: {email, role, device_id, sub, raw_claims}
+    """
+    if not authorization:
+        raise HTTPException(status_code=401, detail='Missing Authorization: Bearer <token>')
+
+    parts = authorization.split()
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        raise HTTPException(status_code=401, detail="Invalid Authorization header format")
+
+    token = parts[1]
 
     try:
-        payload = jwt.decode(
+        unverified_header = jwt.get_unverified_header(token)
+        kid = unverified_header.get("kid")
+        if not kid:
+            raise HTTPException(status_code=401, detail="Invalid token header (missing kid)")
+
+        jwks = _get_jwks()
+        key = None
+        for k in jwks.get("keys", []):
+            if k.get("kid") == kid:
+                key = k
+                break
+        if not key:
+            raise HTTPException(status_code=401, detail="Signing key not found")
+
+        claims = jwt.decode(
             token,
             key,
             algorithms=["RS256"],
@@ -42,29 +75,22 @@ def verify_cognito_token(token: str) -> dict:
             issuer=COGNITO_ISSUER,
             options={"verify_at_hash": False},
         )
-        return payload
+
+        email = claims.get("email") or claims.get("cognito:username") or claims.get("username") or "unknown"
+        role = _extract_role_from_claims(claims)
+
+        # custom claim la tine e custom:device_id
+        device_id = claims.get("custom:device_id") or claims.get("device_id")
+
+        return {
+            "email": email,
+            "role": role,
+            "device_id": device_id,
+            "sub": claims.get("sub"),
+            "raw_claims": claims,
+        }
+
     except JWTError as e:
-        raise HTTPException(status_code=401, detail=f"Invalid or expired token: {str(e)}")
-
-def require_auth(request: Request) -> dict:
-    auth = request.headers.get("Authorization", "")
-    if not auth.startswith("Bearer "):
-        print("[AUTH] Missing Bearer token")
-        raise HTTPException(status_code=401, detail="Missing Authorization: Bearer <token>")
-
-    token = auth.split(" ", 1)[1]
-    payload = verify_cognito_token(token)
-
-    groups = payload.get("cognito:groups", []) or []
-    role = "admin" if "admin" in groups else ("user" if "user" in groups else "unknown")
-    device_id = payload.get("custom:device_id")
-
-    user = {
-        "email": payload.get("email"),
-        "sub": payload.get("sub"),
-        "role": role,
-        "device_id": device_id,
-    }
-
-    print("[AUTH_OK]", user)
-    return user
+        raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
+    except requests.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"JWKS fetch failed: {str(e)}")
