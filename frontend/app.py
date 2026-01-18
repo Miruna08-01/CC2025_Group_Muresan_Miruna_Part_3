@@ -170,4 +170,4 @@ if "device_id" in df.columns:
     )
     st.altair_chart(bar, use_container_width=True)
 else:
-    st.info("Need field: device_id for bar chart")
+    st.info("Need  field: device_id for bar chart")
