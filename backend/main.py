@@ -27,8 +27,12 @@ async def log_requests(request: Request, call_next):
 #     return {"email": "local@test.com", "role": "admin", "device_id": "E-001"}
 @app.get("/api/profile")
 def profile(user=Depends(require_auth)):
-    return {"email": user["email"], "role": user["role"], "device_id": user["device_id"]}
-
+    return {
+        "email": user["email"],
+        "role": user["role"],
+        "device_id": user["device_id"],
+        "token_id": user.get("sub"),  # <-- asta e "token id"
+    }
 
 @app.get("/api/data")
 def data(user=Depends(require_auth)):
