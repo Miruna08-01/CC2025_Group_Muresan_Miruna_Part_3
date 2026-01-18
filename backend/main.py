@@ -22,11 +22,11 @@ async def log_requests(request: Request, call_next):
     print(f"[REQ] {request.method} {request.url.path}")
     return await call_next(request)
 
-@app.get("/api/data")
+@app.get("/api/profile")
 def profile(user=Depends(require_auth)):
     return {"email": user["email"], "role": user["role"], "device_id": user["device_id"]}
 
-@app.get("/api/profile")
+@app.get("/api/data")
 def data(user=Depends(require_auth)):
     # ADMIN: return all devices (concat)
     if user["role"] == "admin":
