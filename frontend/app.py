@@ -159,7 +159,7 @@ if "timestamp" in df.columns and "value" in df.columns:
 else:
     st.info("Need fields: timestamp + value for line chart")
 
-st.markdown("### 3) Bar chart : total records per device")
+st.markdown("### 3) Bar  chart : total records per device")
 if "device_id" in df.columns:
     counts = df.groupby("device_id").size().reset_index(name="count")
 
