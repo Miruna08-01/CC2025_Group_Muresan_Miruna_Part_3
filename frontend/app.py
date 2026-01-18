@@ -107,8 +107,12 @@ with col1:
         st.link_button("Logout from Cognito", LOGOUT_URL)
         st.stop()
 
-with col2:
-    st.caption("Token is sent to backend via Authorization: Bearer <id_token>")
+with st.expander("🔑 Token details"):
+    st.write("Token ID (sub):", claims.get("sub"))
+    st.write("Role:", role)
+    st.write("Device claim:", device_id)
+    st.code(st.session_state["id_token"], language="text")
+
 
 
 headers = {"Authorization": f"Bearer {st.session_state['id_token']}"}
@@ -132,12 +136,40 @@ except Exception as e:
     st.error(f"Backend /api/data error: {e}")
     st.stop()
 
-if "items" not in payload:
+# ✅ afisare frumoasa raspuns raw (optional)
+# st.json(payload)
+
+st.markdown("## ✅ Device totals")
+
+role = payload.get("role")
+
+# ✅ ADMIN
+if role == "admin":
+    items = payload.get("items", [])
+    if not items:
+        st.warning("No devices found.")
+        st.stop()
+
+    df = pd.DataFrame(items)
+    st.dataframe(df, use_container_width=True)
+
+# ✅ USER
+elif role == "user":
+    data = payload.get("data", [])
+    if not data:
+        st.warning("No data found for this user device.")
+        st.stop()
+
+    device_id = payload.get("device_id")
+    total_kwh = data[0].get("total_kwh", 0)
+
+    st.success(f"Device **{device_id}**")
+    st.metric("Total kWh", f"{total_kwh:.2f}")
+
+else:
     st.warning(payload)
     st.stop()
 
-items = payload["items"]
-df = pd.DataFrame(items)
 
 # --- FINAL PROJECT VISUALIZATIONS ---
 st.markdown("## ✅ Final Project Visualizations")
