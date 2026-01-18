@@ -39,27 +39,21 @@ def data(user=Depends(require_auth)):
     role = user.get("role")
     device_id = user.get("device_id")
 
-    # ✅ ADMIN -> toate device-urile
+    # ✅ ADMIN -> listă cu toate device-urile
     if role == "admin":
-        rows = read_latest_totals_all_devices()  # ex: [{"device_id":"E-001","total_kwh":450.67}, ...]
-        return {
-            "role": "admin",
-            "device_id": device_id,   # o să fie null la admin, e OK
-            "data": rows,             # IMPORTANT: data, nu items
-            "count": len(rows),
-        }
+        items = read_latest_totals_all_devices()
+        return {"role": "admin","device_id": device_id, "items": items }
 
-    # ✅ USER -> doar device-ul lui
+    # ✅ USER -> listă cu un singur device (al lui)
     if role == "user":
         if not device_id:
-            raise HTTPException(status_code=403, detail="No device_id claim for this user")
+            raise HTTPException(status_code=403, detail="No   device_id claim for this user")
 
-        row = read_latest_total_for_device(device_id)  # ex: {"device_id":"E-001","total_kwh":450.67}
+        item = read_latest_total_for_device(device_id)
         return {
             "role": "user",
             "device_id": device_id,
-            "data": [row],            # IMPORTANT: tot data (list), ca la admin
-            "count": 1,
+            "data": [item]
         }
 
     raise HTTPException(status_code=403, detail="Insufficient permissions")
