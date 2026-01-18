@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 from auth import require_auth
-from blob_reader import read_latest_dataset
+from blob_reader import read_latest_all_devices, read_latest_for_device
 
 load_dotenv()
 
@@ -12,7 +12,7 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # ok pentru proiect; poți restricționa la domeniul frontendului
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -28,12 +28,13 @@ def profile(user=Depends(require_auth)):
 
 @app.get("/api/data")
 def data(user=Depends(require_auth)):
-    dataset = read_latest_dataset()
-
+    # ADMIN: return all devices (concat)
     if user["role"] == "admin":
+        dataset = read_latest_all_devices()
         print("[DATA_ACCESS_ADMIN]", user["email"], "count=", len(dataset))
         return {"role": "admin", "items": dataset, "count": len(dataset)}
 
+    # USER: return only own device
     if user["role"] != "user":
         print("[AUTHZ] Unknown role", user["email"])
         raise HTTPException(status_code=403, detail="Insufficient permissions")
@@ -42,11 +43,10 @@ def data(user=Depends(require_auth)):
         print("[AUTHZ] User without device_id", user["email"])
         raise HTTPException(status_code=403, detail="No device_id claim for this user")
 
-    filtered = [x for x in dataset if x.get("device_id") == user["device_id"]]
-    print("[DATA_ACCESS_USER]", user["email"], user["device_id"], "count=", len(filtered))
-    return {"role": "user", "device_id": user["device_id"], "items": filtered, "count": len(filtered)}
+    dataset = read_latest_for_device(user["device_id"])
+    print("[DATA_ACCESS_USER]", user["email"], user["device_id"], "count=", len(dataset))
+    return {"role": "user", "device_id": user["device_id"], "items": dataset, "count": len(dataset)}
 
-# local run helper (optional)
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", "3001")), reload=True)
