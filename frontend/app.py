@@ -25,14 +25,18 @@ missing = [k for k, v in {
 if missing:
     st.error(f"Missing   environment variables: {', '.join(missing)}")
     st.stop()
+REDIRECT_URI = REDIRECT_URI.rstrip("/")
+import urllib.parse
+redirect_enc = urllib.parse.quote(REDIRECT_URI, safe="")
 
 AUTH_URL = (
-    f"{COGNITO_DOMAIN}/oauth2/authorize?"
-    f"client_id={COGNITO_CLIENT_ID}"
+    f"{COGNITO_DOMAIN}/oauth2/authorize"
+    f"?client_id={COGNITO_CLIENT_ID}"
     f"&response_type=code"
     f"&scope=openid+email+profile"
-    f"&redirect_uri={REDIRECT_URI}"
+    f"&redirect_uri={redirect_enc}"
 )
+
 
 TOKEN_URL = f"{COGNITO_DOMAIN}/oauth2/token"
 
