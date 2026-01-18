@@ -43,7 +43,7 @@ def data(user=Depends(require_auth)):
     # ✅ USER -> listă cu un singur device (al lui)
     if role == "user":
         if not device_id:
-            raise HTTPException(status_code=403, detail="No device_id claim for this user")
+            raise HTTPException(status_code=403, detail="No   device_id claim for this user")
 
         item = read_latest_total_for_device(device_id)
         return {
