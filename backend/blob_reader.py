@@ -1,125 +1,59 @@
 import os
 import json
-from typing import List, Dict, Any
-from dotenv import load_dotenv
+from typing import Any, Dict, List
+
 from azure.storage.blob import BlobServiceClient
 
-load_dotenv()
 AZURE_STORAGE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
 AZURE_BLOB_CONTAINER = os.getenv("AZURE_BLOB_CONTAINER")
-
-# poate fi "latest" sau "latest/"
-LATEST_PREFIX = os.getenv("LATEST_PREFIX", "latest")
+LATEST_PREFIX = os.getenv("LATEST_PREFIX", "latest/").rstrip("/") + "/"
 
 
 def _get_container_client():
     if not AZURE_STORAGE_CONNECTION_STRING or not AZURE_BLOB_CONTAINER:
         raise RuntimeError("Missing AZURE_STORAGE_CONNECTION_STRING or AZURE_BLOB_CONTAINER")
 
-    # print util ca să vezi dacă se încarcă env-urile
-    print("[BLOB] container=", AZURE_BLOB_CONTAINER)
-    print("[BLOB] latest_prefix=", LATEST_PREFIX)
-
     service = BlobServiceClient.from_connection_string(AZURE_STORAGE_CONNECTION_STRING)
     return service.get_container_client(AZURE_BLOB_CONTAINER)
 
 
-def list_latest_blob_names(limit: int = 50) -> List[str]:
+def _download_json(container, blob_name: str) -> Dict[str, Any]:
+    blob = container.get_blob_client(blob_name)
+    raw = blob.download_blob().readall().decode("utf-8")
+    return json.loads(raw)
+
+
+def _extract_device_total(payload: Dict[str, Any], fallback_device_id: str | None = None) -> Dict[str, Any]:
+    return {
+        "device_id": payload.get("device_id") or fallback_device_id,
+        "total_kwh": payload.get("total_kwh"),
+    }
+
+
+# ✅ ADMIN: toate device-urile (doar device_id + total_kwh)
+def read_latest_totals_all_devices() -> List[Dict[str, Any]]:
     container = _get_container_client()
-    prefix = LATEST_PREFIX.rstrip("/") + "/"
+    out: List[Dict[str, Any]] = []
 
-    names: List[str] = []
-    for b in container.list_blobs(name_starts_with=prefix):
-        names.append(b.name)
-        if len(names) >= limit:
-            break
-    return names
-
-
-def _parse_device_blob_payload(content: str) -> List[Dict[str, Any]]:
-    """
-    Acceptă:
-      - dict { device_id, records: ["{...}", "{...}"] }
-      - list [{...}, {...}]
-    Întoarce listă de obiecte JSON.
-    """
-    payload = json.loads(content)
-
-    # cazul tău: dict cu records string JSON
-    if isinstance(payload, dict) and "records" in payload:
-        out: List[Dict[str, Any]] = []
-        device_id = payload.get("device_id")
-
-        recs = payload.get("records", [])
-        if isinstance(recs, list):
-            for rec in recs:
-                if not isinstance(rec, str):
-                    continue
-                try:
-                    obj = json.loads(rec)
-                    # inject device_id pentru chart/filter
-                    if device_id and "device_id" not in obj:
-                        obj["device_id"] = device_id
-                    out.append(obj)
-                except Exception:
-                    pass
-        return out
-
-    # cazul alternativ: listă direct
-    if isinstance(payload, list):
-        return [x for x in payload if isinstance(x, dict)]
-
-    return []
-
-
-def read_latest_all_devices() -> List[Dict[str, Any]]:
-    """
-    Citește TOATE device-urile din latest/ și concatenează.
-    """
-    container = _get_container_client()
-    prefix = LATEST_PREFIX.rstrip("/") + "/"
-
-    all_items: List[Dict[str, Any]] = []
-
-    print("[BLOB] listing blobs under:", prefix)
-
-    for b in container.list_blobs(name_starts_with=prefix):
+    for b in container.list_blobs(name_starts_with=LATEST_PREFIX):
         name = b.name
-
-        if not name.endswith(".json"):
+        if not (name.endswith(".json") and "/device-" in name):
             continue
-        if "/device-" not in name:
-            continue
-
-        print("[BLOB] reading:", name)
-
-        blob = container.get_blob_client(name)
-        content = blob.download_blob().readall().decode("utf-8")
 
         try:
-            items = _parse_device_blob_payload(content)
-            print("[BLOB] parsed items:", len(items))
-            all_items.extend(items)
+            payload = _download_json(container, name)
+            out.append(_extract_device_total(payload))
         except Exception as e:
-            print("[BLOB] parse failed:", name, "err=", e)
+            print("[BLOB] failed", name, "err=", repr(e))
+            continue
 
-    print("[BLOB] TOTAL items:", len(all_items))
-    return all_items
+    out.sort(key=lambda x: x.get("device_id") or "")
+    return out
 
 
-def read_latest_for_device(device_id: str) -> List[Dict[str, Any]]:
-    """
-    Citește latest/device-{device_id}.json
-    """
+# ✅ USER: doar device-ul lui (doar device_id + total_kwh)
+def read_latest_total_for_device(device_id: str) -> Dict[str, Any]:
     container = _get_container_client()
-    prefix = LATEST_PREFIX.rstrip("/") + "/"
-    blob_name = f"{prefix}device-{device_id}.json"
-
-    print("[BLOB] reading device blob:", blob_name)
-
-    blob = container.get_blob_client(blob_name)
-    content = blob.download_blob().readall().decode("utf-8")
-
-    items = _parse_device_blob_payload(content)
-    print("[BLOB] device items:", len(items))
-    return items
+    blob_name = f"{LATEST_PREFIX}device-{device_id}.json"  # ex: latest/device-E-001.json
+    payload = _download_json(container, blob_name)
+    return _extract_device_total(payload, fallback_device_id=device_id)
