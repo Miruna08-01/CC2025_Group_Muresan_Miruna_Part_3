@@ -159,7 +159,7 @@ if "timestamp" in df.columns and "value" in df.columns:
 else:
     st.info("Need fields: timestamp + value for line chart")
 
-st.markdown("### 3) Bar  chart : total  records per device")
+st.markdown("### 3) Bar  chart : total records per device")
 if "device_id" in df.columns:
     counts = df.groupby("device_id").size().reset_index(name="count")
 
@@ -170,4 +170,4 @@ if "device_id" in df.columns:
     )
     st.altair_chart(bar, use_container_width=True)
 else:
-    st.info("Need  field: device_id for bar chart")
+    st.info("Need   field: device_id for bar chart")
