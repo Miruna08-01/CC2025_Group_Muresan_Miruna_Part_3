@@ -111,9 +111,9 @@ if code and not st.session_state["id_token"]:
 # ----------------------------
 if not st.session_state["id_token"]:
     st.info("You are not logged in.")
-    if st.button("🔐 Login with AWS Cognito"):
-        js_redirect(AUTH_URL)
+    st.link_button("🔐 Login with AWS Cognito", AUTH_URL)
     st.stop()
+
 
 # ----------------------------
 # Claims (client-side decode)
