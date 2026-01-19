@@ -41,8 +41,12 @@ def data(user=Depends(require_auth)):
 
     # ✅ ADMIN -> listă cu toate device-urile
     if role == "admin":
-        items = read_latest_totals_all_devices()
-        return {"role": "admin","device_id": device_id, "items": items }
+        item = read_latest_totals_all_devices()
+        return {
+            "role": "user",
+            "device_id": device_id,
+            "data": [item]
+        }
 
     # ✅ USER -> listă cu un singur device (al lui)
     if role == "user":
