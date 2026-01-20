@@ -189,7 +189,7 @@ if role != "admin":
 # ----------------------------
 st.markdown("## ✅ Final Project Visualizations (Admin only)")
 
-items = (data_payload or {}).get("items", [])
+items = (data_payload or {}).get("item", [])
 if not items:
     st.warning("No devices found in /api/data items.")
     st.stop()
