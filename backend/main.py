@@ -43,7 +43,7 @@ def data(user=Depends(require_auth)):
     if role == "admin":
         item = read_latest_totals_all_devices()
         return {
-            "role": "user",
+            "role": role,
             "device_id": device_id,
             "data": [item]
         }
@@ -55,7 +55,7 @@ def data(user=Depends(require_auth)):
 
         item = read_latest_total_for_device(device_id)
         return {
-            "role": "user",
+            "role": role,
             "device_id": device_id,
             "data": [item]
         }
