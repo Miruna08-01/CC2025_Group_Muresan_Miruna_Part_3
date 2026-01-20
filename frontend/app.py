@@ -177,6 +177,30 @@ except Exception as e:
     st.error(f"Backend /api/data error: {e}")
     st.stop()
 
+# /api/history
+st.subheader("📈 /api/history")
+try:
+    r = requests.get(f"{BACKEND_URL}/api/history?folders_limit=2", headers=headers, timeout=60)
+    st.write("Status:", r.status_code)
+    hist_payload = r.json()
+    st.json(hist_payload)  # optional
+except Exception as e:
+    st.error(f"Backend /api/history error: {e}")
+    st.stop()
+
+if role != "admin":
+    st.info("ℹ️ Visualizations are available only for admin users.")
+    st.stop()
+
+hist_items = hist_payload.get("items", [])
+if not hist_items:
+    st.warning("No historical data found.")
+    st.stop()
+
+df_hist = pd.DataFrame(hist_items)
+df_hist["timestamp"] = pd.to_datetime(df_hist["timestamp"], errors="coerce")
+df_hist = df_hist.dropna(subset=["timestamp"])
+
 # ------------------------------------------------------------
 # ✅ DOAR ADMIN VEDE VIZUALIZARILE
 # ------------------------------------------------------------
@@ -205,16 +229,29 @@ if not isinstance(items, list) or len(items) == 0:
 
 df = pd.DataFrame(items)
 
-st.markdown("### 1) Device totals table")
-st.dataframe(df, use_container_width=True)
+st.markdown("## 1) Latest dataset table")
+df_latest = df.sort_values("timestamp").groupby("device_id").tail(10)  # ultimele 10 / device
+st.dataframe(df_latest, use_container_width=True)
 
-st.markdown("### 2) Bar chart: total_kwh per device")
-if "device_id" in df.columns and "total_kwh" in df.columns:
-    bar = alt.Chart(df).mark_bar().encode(
-        x="device_id:N",
-        y="total_kwh:Q",
-        tooltip=["device_id:N", "total_kwh:Q"]
+
+st.markdown("## 2) Historical trend line chart")
+if "kwh" in df_hist.columns and "device_id" in df_hist.columns:
+    line = alt.Chart(df_hist).mark_line().encode(
+        x="timestamp:T",
+        y="kwh:Q",
+        color="device_id:N",
+        tooltip=["timestamp:T", "kwh:Q", "device_id:N"]
     )
-    st.altair_chart(bar, use_container_width=True)
+    st.altair_chart(line, use_container_width=True)
 else:
-    st.info("Need fields: device_id + total_kwh for bar chart")
+    st.info("Need fields: timestamp + kwh + device_id")
+
+st.markdown("## 3) Bar chart: total records per device")
+counts = df_hist.groupby("device_id").size().reset_index(name="count")
+
+bar = alt.Chart(counts).mark_bar().encode(
+    x="device_id:N",
+    y="count:Q",
+    tooltip=["device_id:N", "count:Q"]
+)
+st.altair_chart(bar, use_container_width=True)
