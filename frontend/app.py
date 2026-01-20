@@ -189,10 +189,19 @@ if role != "admin":
 # ----------------------------
 st.markdown("## ✅ Final Project Visualizations (Admin only)")
 
-items = (data_payload or {}).get("item", [])
-if not items:
-    st.warning("No devices found in /api/data items.")
+st.caption(f"DEBUG keys in /api/data payload: {list((data_payload or {}).keys())}")
+
+# admin ar trebui sa vina cu "items"
+items = (data_payload or {}).get("items")
+
+# fallback daca backend-ul a trimis "data" din greseala
+if items is None:
+    items = (data_payload or {}).get("data", [])
+
+if not isinstance(items, list) or len(items) == 0:
+    st.error("No device totals received from backend. Check /api/data response above.")
     st.stop()
+
 
 df = pd.DataFrame(items)
 
