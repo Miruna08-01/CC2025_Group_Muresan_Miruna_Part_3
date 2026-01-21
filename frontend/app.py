@@ -54,7 +54,13 @@ LOGOUT_URL = (
 # ----------------------------
 # Helpers
 # ----------------------------
-def decode_jwt_no_verify(token: str) -> dict:
+def decode_jwt_no_verify(token) -> dict:
+    # token trebuie sa fie string de forma a.b.c
+    if not isinstance(token, str):
+        raise ValueError(f"Token is not a string: {type(token)}")
+    token = token.strip()
+    if token.count(".") != 2:
+        raise ValueError("Token does not look like a JWT (expected 2 dots).")
     return jwt.decode(token, options={"verify_signature": False, "verify_aud": False})
 
 def safe_json(resp: requests.Response):
@@ -90,7 +96,16 @@ if code and not st.session_state["id_token"]:
         )
         token_resp.raise_for_status()
         tokens = token_resp.json()
-        st.session_state["id_token"] = tokens.get("id_token")
+
+        # preferam id_token; daca lipseste, folosim access_token (uneori config/scopes)
+        token_value = tokens.get("id_token") or tokens.get("access_token")
+
+        if not token_value:
+            st.error("❌ No id_token / access_token returned from Cognito token endpoint.")
+            st.json(tokens)  # vezi ce a venit
+            st.stop()
+
+        st.session_state["id_token"] = token_value
 
         # curățăm ?code=...
         st.query_params.clear()
@@ -113,7 +128,15 @@ if not st.session_state["id_token"]:
 # ----------------------------
 # Claims (client-side decode)
 # ----------------------------
-claims = decode_jwt_no_verify(st.session_state["id_token"])
+try:
+    claims = decode_jwt_no_verify(st.session_state["id_token"])
+except Exception as e:
+    st.error(f"❌ Cannot decode token from session: {e}")
+    st.write("Type:", type(st.session_state["id_token"]))
+    st.write("Value (first 120 chars):", str(st.session_state["id_token"])[:120])
+    st.session_state["id_token"] = None
+    st.info("Please login again.")
+    st.rerun()
 groups = claims.get("cognito:groups", [])
 role = groups[0] if isinstance(groups, list) and groups else (groups or "user")
 device_claim = claims.get("custom:device_id")
