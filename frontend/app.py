@@ -198,7 +198,8 @@ if not hist_items:
     st.stop()
 
 df_hist = pd.DataFrame(hist_items)
-df_hist["timestamp"] = pd.to_datetime(df_hist["timestamp"], errors="coerce")
+df_hist["generation_timestamp"] = pd.to_datetime(df_hist["generation_timestamp"], errors="coerce")
+
 df_hist = df_hist.dropna(subset=["timestamp"])
 
 # ------------------------------------------------------------
