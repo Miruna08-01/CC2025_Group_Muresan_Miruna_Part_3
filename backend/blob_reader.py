@@ -58,7 +58,7 @@ def read_latest_total_for_device(device_id: str) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------
-# ✅ HISTORICAL: citește ultimele N foldere din historical/
+#  HISTORICAL: citește ultimele N foldere din historical/
 # ---------------------------------------------------------
 
 def _list_historical_folders(container, folders_limit: int) -> List[str]:

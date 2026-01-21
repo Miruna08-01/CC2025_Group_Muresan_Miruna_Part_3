@@ -11,7 +11,7 @@ import altair as alt
 # Page setup
 # ----------------------------
 st.set_page_config(page_title="Streamlit + Cognito Secure App", layout="wide")
-st.title("✅ Streamlit Frontend (AWS Cognito)")
+st.title("Streamlit Frontend (AWS Cognito)")
 
 # ----------------------------
 # Env
@@ -101,7 +101,7 @@ if code and not st.session_state["id_token"]:
         token_value = tokens.get("id_token") or tokens.get("access_token")
 
         if not token_value:
-            st.error("❌ No id_token / access_token returned from Cognito token endpoint.")
+            st.error("No id_token / access_token returned from Cognito token endpoint.")
             st.json(tokens)  # vezi ce a venit
             st.stop()
 
@@ -109,10 +109,10 @@ if code and not st.session_state["id_token"]:
 
         # curățăm ?code=...
         st.query_params.clear()
-        st.success("✅ Logged in with Cognito!")
+        st.success("Logged in with Cognito!")
         st.rerun()
     except Exception as e:
-        st.error(f"❌ Token exchange failed: {e}")
+        st.error(f"Token exchange failed: {e}")
         st.stop()
 
 # ----------------------------
@@ -121,7 +121,7 @@ if code and not st.session_state["id_token"]:
 if not st.session_state["id_token"]:
     st.info("You are not logged in.")
     # în mod normal link_button deschide în același tab
-    if st.button("🔐 Login with AWS Cognito"):
+    if st.button("Login with AWS Cognito"):
         st.markdown(f'<meta http-equiv="refresh" content="0; url={AUTH_URL}">', unsafe_allow_html=True)
         st.stop()
 
@@ -131,7 +131,7 @@ if not st.session_state["id_token"]:
 try:
     claims = decode_jwt_no_verify(st.session_state["id_token"])
 except Exception as e:
-    st.error(f"❌ Cannot decode token from session: {e}")
+    st.error(f"Cannot decode token from session: {e}")
     st.write("Type:", type(st.session_state["id_token"]))
     st.write("Value (first 120 chars):", str(st.session_state["id_token"])[:120])
     st.session_state["id_token"] = None
@@ -151,7 +151,7 @@ st.write("Device claim:", device_claim)
 col1, col2 = st.columns(2)
 
 with col1:
-    if st.button("🚪 Logout"):
+    if st.button("Logout"):
         st.session_state["id_token"] = None
         st.link_button("Logout from Cognito", LOGOUT_URL)
         st.stop()
@@ -159,7 +159,7 @@ with col1:
 with col2:
     st.caption("Token is sent to backend via Authorization: Bearer <id_token>")
 
-with st.expander("🔑 Token details"):
+with st.expander("Token details"):
     st.write("Token ID (sub):", claims.get("sub"))
     st.write("Role:", role)
     st.write("Device claim:", device_claim)
@@ -170,7 +170,7 @@ headers = {"Authorization": f"Bearer {st.session_state['id_token']}"}
 # ----------------------------
 # /api/profile (pretty JSON)
 # ----------------------------
-st.subheader("👤 /api/profile")
+st.subheader("/api/profile")
 profile_payload = None
 try:
     r = requests.get(f"{BACKEND_URL}/api/profile", headers=headers, timeout=20)
@@ -183,7 +183,7 @@ except Exception as e:
 # ----------------------------
 # /api/data (latest totals)
 # ----------------------------
-st.subheader("📦 /api/data (latest totals)")
+st.subheader("/api/data (latest totals)")
 data_payload = None
 try:
     r = requests.get(f"{BACKEND_URL}/api/data", headers=headers, timeout=30)
@@ -199,7 +199,7 @@ with st.expander("🔎 /api/data raw JSON (debug)"):
 # ----------------------------
 # /api/history (historical totals)
 # ----------------------------
-st.subheader("📈 /api/history (historical totals)")
+st.subheader("api/history (historical totals)")
 hist_payload = None
 try:
     r = requests.get(f"{BACKEND_URL}/api/history?folders_limit=5", headers=headers, timeout=60)
@@ -209,17 +209,17 @@ except Exception as e:
     st.error(f"Backend /api/history error: {e}")
     st.stop()
 
-with st.expander("🔎 /api/history raw JSON (debug)"):
+with st.expander("/api/history raw JSON (debug)"):
     st.json(hist_payload)
 
 # ------------------------------------------------------------
-# ✅ DOAR ADMIN VEDE VIZUALIZARILE
+# DOAR ADMIN VEDE VIZUALIZARILE
 # ------------------------------------------------------------
 if role != "admin":
-    st.info("ℹ️ Visualizations are available only for admin users.")
+    st.info("ℹVisualizations are available only for admin users.")
     st.stop()
 
-st.markdown("## ✅ Final Project Visualizations (Admin only)")
+st.markdown("## Final Project Visualizations (Admin only)")
 
 # ============================================================
 # 1) Latest dataset table (from /api/data)
@@ -254,7 +254,7 @@ st.dataframe(df_latest, use_container_width=True)
 # 2) Historical trend line chart (from /api/history)
 #    total_kwh over time per device
 # ============================================================
-st.markdown("### 2) Historical trend line chart (total_kwh over time, from /api/history)")
+st.markdown("### 2) Historical heatmap (device x time)")
 
 hist_items = (hist_payload or {}).get("items", [])
 if not isinstance(hist_items, list) or len(hist_items) == 0:
@@ -273,14 +273,19 @@ df_hist["total_kwh"] = pd.to_numeric(df_hist.get("total_kwh"), errors="coerce")
 
 df_hist = df_hist.dropna(subset=["generation_timestamp", "total_kwh", "device_id"])
 
-line = alt.Chart(df_hist).mark_line().encode(
-    x=alt.X("generation_timestamp:T", title="generation_timestamp"),
-    y=alt.Y("total_kwh:Q", title="total_kwh"),
-    color=alt.Color("device_id:N", title="device_id"),
-    tooltip=["device_id:N", "generation_timestamp:T", "total_kwh:Q"]
-).interactive()
+heat = (
+    alt.Chart(df_hist)
+    .mark_rect()
+    .encode(
+        x=alt.X("generation_timestamp:T", title="Time"),
+        y=alt.Y("device_id:N", title="Device", sort="ascending"),
+        color=alt.Color("total_kwh:Q", title="Total kWh"),
+        tooltip=["generation_timestamp:T", "device_id:N", alt.Tooltip("total_kwh:Q", format=".2f")]
+    )
+)
 
-st.altair_chart(line, use_container_width=True)
+st.altair_chart(heat, use_container_width=True)
+
 
 # ============================================================
 # 3) Additional chart: total records per device (from /api/history)

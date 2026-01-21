@@ -42,7 +42,7 @@ def data(user=Depends(require_auth)):
     role = user.get("role")
     device_id = user.get("device_id")
 
-    # ✅ ADMIN -> listă cu toate device-urile
+    # ADMIN -> listă cu toate device-urile
     if role == "admin":
         item = read_latest_totals_all_devices()
         return {
@@ -51,7 +51,7 @@ def data(user=Depends(require_auth)):
             "data": [item]
         }
 
-    # ✅ USER -> listă cu un singur device (al lui)
+    # USER -> listă cu un singur device (al lui)
     if role == "user":
         if not device_id:
             raise HTTPException(status_code=403, detail="No   device_id claim for this user")
