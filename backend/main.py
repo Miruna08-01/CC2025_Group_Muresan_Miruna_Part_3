@@ -66,12 +66,13 @@ def data(user=Depends(require_auth)):
     raise HTTPException(status_code=403, detail="Insufficient permissions")
 
 @app.get("/api/history")
-def history(user=Depends(fake_user), folders_limit: int = 2):
+def history(user=Depends(require_auth), folders_limit: int = 2):
     role = user.get("role")
 
 
     if role == "admin":
         rows = read_historical_all_devices(folders_limit=folders_limit, max_devices=50)
         return {"role": "admin", "items": rows, "count": len(rows)}
-
+    if role == "user":
+        raise HTTPException(status_code=403, detail="User cannot see history of devices")
     raise HTTPException(status_code=403, detail="Insufficient permissions")
