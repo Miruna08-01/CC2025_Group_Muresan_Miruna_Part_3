@@ -42,7 +42,6 @@ AUTH_URL = (
     f"&scope=openid+email+profile"
     f"&redirect_uri={redirect_enc}"
 )
-
 TOKEN_URL = f"{COGNITO_DOMAIN}/oauth2/token"
 
 LOGOUT_URL = (
@@ -56,16 +55,6 @@ LOGOUT_URL = (
 # ----------------------------
 def decode_jwt_no_verify(token: str) -> dict:
     return jwt.decode(token, options={"verify_signature": False, "verify_aud": False})
-
-def js_redirect(url: str):
-    st.markdown(
-        f"""
-        <script>
-            window.location.href = "{url}";
-        </script>
-        """,
-        unsafe_allow_html=True
-    )
 
 # ----------------------------
 # Session init
@@ -114,7 +103,6 @@ if not st.session_state["id_token"]:
     st.link_button("🔐 Login with AWS Cognito", AUTH_URL)
     st.stop()
 
-
 # ----------------------------
 # Claims (client-side decode)
 # ----------------------------
@@ -154,7 +142,6 @@ headers = {"Authorization": f"Bearer {st.session_state['id_token']}"}
 # /api/profile (JSON)
 # ----------------------------
 st.subheader("👤 /api/profile")
-profile_payload = None
 try:
     r = requests.get(f"{BACKEND_URL}/api/profile", headers=headers, timeout=15)
     st.write("Status:", r.status_code)
@@ -162,12 +149,12 @@ try:
     st.json(profile_payload)
 except Exception as e:
     st.error(f"Backend /api/profile error: {e}")
+    st.stop()
 
 # ----------------------------
 # /api/data (JSON)
 # ----------------------------
 st.subheader("📦 /api/data")
-data_payload = None
 try:
     r = requests.get(f"{BACKEND_URL}/api/data", headers=headers, timeout=30)
     st.write("Status:", r.status_code)
@@ -177,30 +164,18 @@ except Exception as e:
     st.error(f"Backend /api/data error: {e}")
     st.stop()
 
-# /api/history
+# ----------------------------
+# /api/history (JSON)
+# ----------------------------
 st.subheader("📈 /api/history")
 try:
-    r = requests.get(f"{BACKEND_URL}/api/history?folders_limit=2", headers=headers, timeout=60)
+    r = requests.get(f"{BACKEND_URL}/api/history?folders_limit=7", headers=headers, timeout=60)
     st.write("Status:", r.status_code)
     hist_payload = r.json()
-    st.json(hist_payload)  # optional
+    st.json(hist_payload)
 except Exception as e:
     st.error(f"Backend /api/history error: {e}")
     st.stop()
-
-if role != "admin":
-    st.info("ℹ️ Visualizations are available only for admin users.")
-    st.stop()
-
-hist_items = hist_payload.get("items", [])
-if not hist_items:
-    st.warning("No historical data found.")
-    st.stop()
-
-df_hist = pd.DataFrame(hist_items)
-df_hist["generation_timestamp"] = pd.to_datetime(df_hist["generation_timestamp"], errors="coerce")
-
-df_hist = df_hist.dropna(subset=["timestamp"])
 
 # ------------------------------------------------------------
 # ✅ DOAR ADMIN VEDE VIZUALIZARILE
@@ -210,49 +185,64 @@ if role != "admin":
     st.stop()
 
 # ----------------------------
-# Admin visualizations
+# Parse /api/data items (admin latest totals)
 # ----------------------------
-st.markdown("## ✅ Final Project Visualizations (Admin only)")
+items_latest = (data_payload or {}).get("items")
+if items_latest is None:
+    # fallback daca backend a trimis "data"
+    items_latest = (data_payload or {}).get("data", [])
 
-st.caption(f"DEBUG keys in /api/data payload: {list((data_payload or {}).keys())}")
-
-# admin ar trebui sa vina cu "items"
-items = (data_payload or {}).get("items")
-
-# fallback daca backend-ul a trimis "data" din greseala
-if items is None:
-    items = (data_payload or {}).get("data", [])
-
-if not isinstance(items, list) or len(items) == 0:
-    st.error("No device totals received from backend. Check /api/data response above.")
+if not isinstance(items_latest, list) or len(items_latest) == 0:
+    st.error("No device totals received from backend in /api/data. Check JSON above.")
     st.stop()
 
+df_latest = pd.DataFrame(items_latest)
 
-df = pd.DataFrame(items)
+# ----------------------------
+# Parse /api/history items (admin historical totals)
+# ----------------------------
+hist_items = (hist_payload or {}).get("items", [])
+if not isinstance(hist_items, list) or len(hist_items) == 0:
+    st.error("No historical items received from /api/history. Check JSON above.")
+    st.stop()
 
-st.markdown("## 1) Latest dataset table")
-df_latest = df.sort_values("timestamp").groupby("device_id").tail(10)  # ultimele 10 / device
+df_hist = pd.DataFrame(hist_items)
+
+# ✅ timestamp corect in history = generation_timestamp
+df_hist["generation_timestamp"] = pd.to_datetime(df_hist["generation_timestamp"], errors="coerce")
+df_hist = df_hist.dropna(subset=["generation_timestamp"])
+
+# ------------------------------------------------------------
+# Admin visualizations
+# ------------------------------------------------------------
+st.markdown("## ✅ Final Project Visualizations (Admin only)")
+
+# 1) Latest dataset table
+st.markdown("### 1) Latest dataset table (from /api/data)")
 st.dataframe(df_latest, use_container_width=True)
 
-
-st.markdown("## 2) Historical trend line chart")
-if "kwh" in df_hist.columns and "device_id" in df_hist.columns:
+# 2) Historical trend line chart
+st.markdown("### 2) Historical trend line chart (total_kwh over time, from /api/history)")
+if {"generation_timestamp", "total_kwh", "device_id"}.issubset(df_hist.columns):
     line = alt.Chart(df_hist).mark_line().encode(
-        x="timestamp:T",
-        y="kwh:Q",
+        x="generation_timestamp:T",
+        y="total_kwh:Q",
         color="device_id:N",
-        tooltip=["timestamp:T", "kwh:Q", "device_id:N"]
+        tooltip=["device_id:N", "generation_timestamp:T", "total_kwh:Q", "folder:N"]
     )
     st.altair_chart(line, use_container_width=True)
 else:
-    st.info("Need fields: timestamp + kwh + device_id")
+    st.info("Need fields in history: generation_timestamp + total_kwh + device_id")
 
-st.markdown("## 3) Bar chart: total records per device")
-counts = df_hist.groupby("device_id").size().reset_index(name="count")
-
-bar = alt.Chart(counts).mark_bar().encode(
-    x="device_id:N",
-    y="count:Q",
-    tooltip=["device_id:N", "count:Q"]
-)
-st.altair_chart(bar, use_container_width=True)
+# 3) Additional chart: bar chart
+st.markdown("### 3) Additional chart: number of historical snapshots per device")
+if "device_id" in df_hist.columns:
+    counts = df_hist.groupby("device_id").size().reset_index(name="count")
+    bar = alt.Chart(counts).mark_bar().encode(
+        x="device_id:N",
+        y="count:Q",
+        tooltip=["device_id:N", "count:Q"]
+    )
+    st.altair_chart(bar, use_container_width=True)
+else:
+    st.info("Need field: device_id in history for bar chart")
