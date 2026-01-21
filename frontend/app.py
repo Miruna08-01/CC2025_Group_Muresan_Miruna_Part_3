@@ -121,9 +121,8 @@ if code and not st.session_state["id_token"]:
 if not st.session_state["id_token"]:
     st.info("You are not logged in.")
     # în mod normal link_button deschide în același tab
-    if st.button("Login with AWS Cognito"):
-        st.markdown(f'<meta http-equiv="refresh" content="0; url={AUTH_URL}">', unsafe_allow_html=True)
-        st.stop()
+    st.link_button("Login with AWS Cognito",AUTH_URL)
+    st.stop()
 
 # ----------------------------
 # Claims (client-side decode)
